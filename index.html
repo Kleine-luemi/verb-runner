@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verb Runner</title>
+
+<style>
+
+*{
+    box-sizing:border-box;
+    margin:0;
+    padding:0;
+    font-family:Arial,sans-serif;
+}
+
+body{
+    background:#87ceeb;
+}
+
+.hud{
+    display:flex;
+    justify-content:space-around;
+    padding:15px;
+    background:white;
+    font-weight:bold;
+    font-size:18px;
+}
+
+#game{
+    position:relative;
+    height:350px;
+    overflow:hidden;
+    background:
+    linear-gradient(
+        to bottom,
+        #87ceeb 0%,
+        #87ceeb 70%,
+        #7fd37f 70%,
+        #58a958 100%
+    );
+}
+
+.ground{
+    position:absolute;
+    bottom:0;
+    width:100%;
+    height:70px;
+    background:#417d41;
+}
+
+#runner{
+    position:absolute;
+    left:120px;
+    bottom:70px;
+    font-size:60px;
+    z-index:10;
+}
+
+.shielded{
+    filter:drop-shadow(0 0 12px gold);
+}
+
+.object{
+    position:absolute;
+    font-size:42px;
+}
+
+#panel{
+    background:white;
+    padding:20px;
+}
+
+#panel h2{
+    text-align:center;
+    margin-bottom:10px;
+}
+
+#panel p{
+    text-align:center;
+    margin-bottom:15px;
+}
+
+.answers{
+    display:grid;
+    gap:10px;
+    max-width:500px;
+    margin:auto;
+}
+
+button{
+    padding:14px;
+    border:none;
+    border-radius:10px;
+    background:#3b82f6;
+    color:white;
+    font-size:18px;
+    cursor:pointer;
+}
+
+button:hover{
+    background:#2563eb;
+}
+
+.correct{
+    background:#22c55e !important;
+}
+
+.wrong{
+    background:#ef4444 !important;
+}
+
+#message{
+    text-align:center;
+    margin-top:10px;
+    font-weight:bold;
+    min-height:24px;
+}
+
+.gameover{
+    text-align:center;
+    padding:30px;
+}
+
+.restart{
+    margin-top:15px;
+    background:#f97316;
+}
+
+</style>
+</head>
+<body>
+
+<div class="hud">
+    <div>🏆 Score: <span id="score">0</span></div>
+    <div>🔥 Combo: <span id="combo">0</span></div>
+    <div>❤️ Lives: <span id="lives">3</span></div>
+    <div>🪙 Coins: <span id="coins">0</span></div>
+</div>
+
+<div id="game">
+
+    <div id="runner">🏃</div>
+
+    <div class="ground"></div>
+
+</div>
+
+<div id="panel">
+
+    <h2 id="verb"></h2>
+    <p id="task"></p>
+
+    <div class="answers" id="answers"></div>
+
+    <div id="message"></div>
+
+</div>
+
+<script>
+
+const verbs = [
+
+{inf:"go",past:"went",part:"gone"},
+{inf:"see",past:"saw",part:"seen"},
+{inf:"write",past:"wrote",part:"written"},
+{inf:"eat",past:"ate",part:"eaten"},
+{inf:"take",past:"took",part:"taken"},
+{inf:"give",past:"gave",part:"given"},
+{inf:"break",past:"broke",part:"broken"},
+{inf:"drive",past:"drove",part:"driven"},
+{inf:"drink",past:"drank",part:"drunk"},
+{inf:"know",past:"knew",part:"known"},
+{inf:"choose",past:"chose",part:"chosen"},
+{inf:"begin",past:"began",part:"begun"},
+{inf:"come",past:"came",part:"come"},
+{inf:"fly",past:"flew",part:"flown"},
+{inf:"forget",past:"forgot",part:"forgotten"}
+
+];
+
+let score = 0;
+let combo = 0;
+let lives = 3;
+let coins = 0;
+
+let shield = false;
+let doublePoints = false;
+
+let correctAnswer = "";
+let currentObstacle = null;
+
+const game = document.getElementById("game");
+const runner = document.getElementById("runner");
+
+let playerY = 70;
+let velocity = 0;
+let jumping = false;
+
+const gravity = 0.9;
+
+const objects = [];
+
+function updateHUD(){
+
+    scoreEl.textContent = score;
+    comboEl.textContent = combo;
+    livesEl.textContent = lives;
+    coinsEl.textContent = coins;
+}
+
+const scoreEl = document.getElementById("score");
+const comboEl = document.getElementById("combo");
+const livesEl = document.getElementById("lives");
+const coinsEl = document.getElementById("coins");
+
+function shuffle(arr){
+
+    return [...arr].sort(() =>
+        Math.random() - 0.5
+    );
+}
+
+function isColliding(a,b){
+
+    const ra = a.getBoundingClientRect();
+    const rb = b.getBoundingClientRect();
+
+    return (
+        ra.left < rb.right &&
+        ra.right > rb.left &&
+        ra.top < rb.bottom &&
+        ra.bottom > rb.top
+    );
+}
+
+function jump(){
+
+    if(jumping) return;
+
+    jumping = true;
+    velocity = 18;
+}
+
+document.addEventListener("keydown",e=>{
+
+    if(e.code==="Space"){
+        jump();
+    }
+
+});
+
+function createObject(icon,type,speed,y){
+
+    const el =
+    document.createElement("div");
+
+    el.className = "object";
+    el.textContent = icon;
+
+    game.appendChild(el);
+
+    const obj = {
+
+        type,
+        x: window.innerWidth,
+        y,
+        speed,
+        el,
+        collected:false
+
+    };
+
+    el.style.left = obj.x + "px";
+    el.style.bottom = obj.y + "px";
+
+    objects.push(obj);
+
+    return obj;
+}
+
+function spawnObstacle(){
+
+    currentObstacle =
+    createObject(
+        "🪨",
+        "obstacle",
+        8,
+        70
+    );
+}
+
+function spawnCoin(){
+
+    createObject(
+        "🪙",
+        "coin",
+        6,
+        180
+    );
+}
+
+function spawnHeart(){
+
+    createObject(
+        "❤️",
+        "heart",
+        6,
+        220
+    );
+}
+
+function spawnShield(){
+
+    createObject(
+        "🛡️",
+        "shield",
+        6,
+        200
+    );
+}
+
+function spawnStar(){
+
+    createObject(
+        "⭐",
+        "double",
+        6,
+        240
+    );
+}
+
+function nextQuestion(){
+
+    const verb =
+    verbs[Math.floor(
+        Math.random()*verbs.length
+    )];
+
+    const mode =
+    Math.random()<0.5
+    ? "past"
+    : "part";
+
+    correctAnswer =
+    verb[mode];
+
+    verbLabel.textContent =
+    verb.inf.toUpperCase();
+
+    taskLabel.textContent =
+    mode==="past"
+    ? "Choose the Simple Past"
+    : "Choose the Past Participle";
+
+    spawnObstacle();
+
+    if(Math.random()<0.5) spawnCoin();
+    if(Math.random()<0.15) spawnHeart();
+    if(Math.random()<0.15) spawnShield();
+    if(Math.random()<0.10) spawnStar();
+
+    const pool=[];
+
+    verbs.forEach(v=>{
+
+        pool.push(v.past);
+        pool.push(v.part);
+
+    });
+
+    const wrong =
+    shuffle(
+        pool.filter(
+            x=>x!==correctAnswer
+        )
+    ).slice(0,2);
+
+    const options =
+    shuffle([
+        correctAnswer,
+        ...wrong
+    ]);
+
+    answers.innerHTML="";
+
+    options.forEach(option=>{
+
+        const btn =
+        document.createElement("button");
+
+        btn.textContent = option;
+
+        btn.onclick = ()=>{
+
+            document
+            .querySelectorAll("button")
+            .forEach(b=>b.disabled=true);
+
+            if(option===correctAnswer){
+
+                btn.classList.add("correct");
+
+                let gained = 100;
+
+                if(doublePoints){
+                    gained *= 2;
+                }
+
+                score += gained;
+                coins += 5;
+
+                combo++;
+
+                jump();
+
+                if(currentObstacle){
+                    currentObstacle.collected=true;
+                    currentObstacle.el.remove();
+                }
+
+                message.textContent =
+                "Correct!";
+
+            }else{
+
+                btn.classList.add("wrong");
+
+                combo = 0;
+
+                if(shield){
+
+                    shield = false;
+                    runner.classList.remove("shielded");
+
+                }else{
+
+                    lives--;
+
+                }
+
+                message.textContent =
+                "Wrong answer!";
+            }
+
+            updateHUD();
+
+            setTimeout(()=>{
+
+                message.textContent="";
+                nextQuestion();
+
+            },1000);
+
+        };
+
+        answers.appendChild(btn);
+
+    });
+}
+
+const verbLabel =
+document.getElementById("verb");
+
+const taskLabel =
+document.getElementById("task");
+
+const answers =
+document.getElementById("answers");
+
+const message =
+document.getElementById("message");
+
+function gameLoop(){
+
+    velocity -= gravity;
+
+    playerY += velocity;
+
+    if(playerY <= 70){
+
+        playerY = 70;
+        velocity = 0;
+        jumping = false;
+    }
+
+    runner.style.bottom =
+    playerY + "px";
+
+    for(let i=objects.length-1;i>=0;i--){
+
+        const obj = objects[i];
+
+        obj.x -= obj.speed;
+
+        obj.el.style.left =
+        obj.x + "px";
+
+        if(obj.x < -100){
+
+            obj.el.remove();
+            objects.splice(i,1);
+            continue;
+        }
+
+        if(
+            !obj.collected &&
+            isColliding(
+                runner,
+                obj.el
+            )
+        ){
+
+            obj.collected = true;
+
+            switch(obj.type){
+
+                case "coin":
+
+                    coins += 10;
+                    break;
+
+                case "heart":
+
+                    lives =
+                    Math.min(
+                        lives+1,
+                        5
+                    );
+                    break;
+
+                case "shield":
+
+                    shield = true;
+
+                    runner.classList.add(
+                        "shielded"
+                    );
+                    break;
+
+                case "double":
+
+                    doublePoints = true;
+
+                    setTimeout(()=>{
+
+                        doublePoints = false;
+
+                    },10000);
+
+                    break;
+
+                case "obstacle":
+
+                    if(!shield){
+
+                        lives--;
+                        combo = 0;
+
+                    }else{
+
+                        shield=false;
+
+                        runner.classList.remove(
+                        "shielded"
+                        );
+
+                    }
+
+                    break;
+            }
+
+            updateHUD();
+
+            obj.el.remove();
+            objects.splice(i,1);
+        }
+
+    }
+
+    if(lives<=0){
+
+        document.getElementById("panel")
+        .innerHTML = `
+        <div class="gameover">
+            <h1>Game Over</h1>
+            <p>Final Score: ${score}</p>
+            <button class="restart"
+            onclick="location.reload()">
+            Play Again
+            </button>
+        </div>
+        `;
+
+        return;
+    }
+
+    requestAnimationFrame(
+        gameLoop
+    );
+}
+
+updateHUD();
+nextQuestion();
+gameLoop();
+
+</script>
+
+</body>
+</html>
